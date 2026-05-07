@@ -80,7 +80,7 @@ describe("pi-apply-patch", () => {
 		expect(await readFile(path.join(directory, "sample.txt"), "utf-8")).toBe("after\n");
 	});
 
-	it("#given apply_patch tool execution #when started #then emits pending TUI update", async () => {
+	it("#given apply_patch tool execution #when started #then emits pending TUI diff update", async () => {
 		// given
 		const directory = await createTempDirectory();
 		await writeFile(path.join(directory, "sample.txt"), "before\n", "utf-8");
@@ -110,7 +110,13 @@ describe("pi-apply-patch", () => {
 		);
 
 		// then
-		expect(updates[0]).toBe("Applying patch...\n• sample.txt\n• created.txt");
+		expect(updates[0]).toContain("Applying patch...\nIndex: sample.txt");
+		expect(updates[0]).toContain("--- sample.txt");
+		expect(updates[0]).toContain("+++ sample.txt");
+		expect(updates[0]).toContain("-before");
+		expect(updates[0]).toContain("+after");
+		expect(updates[0]).toContain("Index: created.txt");
+		expect(updates[0]).toContain("+created");
 	});
 
 	it("#given codex multi operation freeform patch #when executed #then applies all operations", async () => {
