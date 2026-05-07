@@ -119,6 +119,37 @@ describe("pi-apply-patch", () => {
 		expect(updates[0]).toContain("+created");
 	});
 
+	it("#given add patch overwriting existing file #when started #then pending diff shows removed content", async () => {
+		// given
+		const directory = await createTempDirectory();
+		await writeFile(path.join(directory, "existing.txt"), "old\n", "utf-8");
+		const patch = `*** Begin Patch
+*** Add File: existing.txt
++new
+*** End Patch`;
+		const updates: string[] = [];
+
+		// when
+		await createApplyPatchTool().execute(
+			"apply-patch-overwrite-test",
+			{ input: patch },
+			undefined,
+			(update) => {
+				const firstText = update.content.find((block) => block.type === "text")?.text;
+				if (firstText) {
+					updates.push(firstText);
+				}
+			},
+			{ cwd: directory } as never,
+		);
+
+		// then
+		expect(updates[0]).toContain("Index: existing.txt");
+		expect(updates[0]).toContain("-old");
+		expect(updates[0]).toContain("+new");
+		expect(await readFile(path.join(directory, "existing.txt"), "utf-8")).toBe("new\n");
+	});
+
 	it("#given codex multi operation freeform patch #when executed #then applies all operations", async () => {
 		// given
 		const directory = await createTempDirectory();

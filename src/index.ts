@@ -205,12 +205,32 @@ function createPatchDiff(oldPath: string, newPath: string, oldContent: string, n
 	return trimDiff(createTwoFilesPatch(oldPath, newPath, oldContent, newContent).trimEnd());
 }
 
+async function readExistingFileForPreview(absolutePath: string): Promise<string> {
+	try {
+		return await readFile(absolutePath, "utf-8");
+	} catch (error) {
+		if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+			return "";
+		}
+		throw error;
+	}
+}
+
+function formatPendingPatchPaths(patchText: string): string {
+	const paths = extractPatchedPaths(patchText);
+	if (paths.length === 0) {
+		return "Applying patch...";
+	}
+	return `Applying patch...\n${paths.map((filePath) => `• ${filePath}`).join("\n")}`;
+}
+
 async function createPatchPreview(cwd: string, hunks: ParsedPatch[]): Promise<string> {
 	const diffs: string[] = [];
 	for (const hunk of hunks) {
 		const absolutePath = await resolveWorkspacePath(cwd, hunk.filePath);
 		if (hunk.type === "add") {
-			diffs.push(createPatchDiff(hunk.filePath, hunk.filePath, "", hunk.content));
+			const oldContent = await readExistingFileForPreview(absolutePath);
+			diffs.push(createPatchDiff(hunk.filePath, hunk.filePath, oldContent, hunk.content));
 			continue;
 		}
 
@@ -222,6 +242,9 @@ async function createPatchPreview(cwd: string, hunks: ParsedPatch[]): Promise<st
 
 		const oldContent = await readFile(absolutePath, "utf-8");
 		const newContent = hunk.chunks.length === 0 ? oldContent : replaceChunks(oldContent, hunk.filePath, hunk.chunks);
+		if (hunk.movePath) {
+			await resolveWorkspacePath(cwd, hunk.movePath);
+		}
 		diffs.push(createPatchDiff(hunk.filePath, hunk.movePath ?? hunk.filePath, oldContent, newContent));
 	}
 	return diffs.filter((diff) => diff.trim().length > 0).join("\n");
@@ -492,21 +515,21 @@ export async function applyPatch(cwd: string, patchText: string): Promise<string
 }
 
 async function createPendingPatchUpdate(cwd: string, patchText: string): Promise<string> {
-	const hunks = parsePatch(patchText);
-	if (hunks.length === 0) {
-		return "Applying patch...";
+	try {
+		const hunks = parsePatch(patchText);
+		if (hunks.length === 0) {
+			return "Applying patch...";
+		}
+
+		const diff = await createPatchPreview(cwd, hunks);
+		if (diff.trim().length > 0) {
+			return `Applying patch...\n${diff}`;
+		}
+	} catch {
+		return formatPendingPatchPaths(patchText);
 	}
 
-	const diff = await createPatchPreview(cwd, hunks);
-	if (diff.trim().length > 0) {
-		return `Applying patch...\n${diff}`;
-	}
-
-	const paths = extractPatchedPaths(patchText);
-	if (paths.length === 0) {
-		return "Applying patch...";
-	}
-	return `Applying patch...\n${paths.map((filePath) => `• ${filePath}`).join("\n")}`;
+	return formatPendingPatchPaths(patchText);
 }
 
 function hasEditTools(toolNames: string[]): boolean {
