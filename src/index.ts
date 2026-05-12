@@ -206,7 +206,8 @@ const GPT_APPLY_PATCH_PROVIDERS = new Set(["openai", "azure-openai-responses", "
 export const PATCH_PREVIEW_MAX_LINES = 16;
 export const PATCH_PREVIEW_MAX_CHARS = 4000;
 const PATCH_PREVIEW_HEAD_LINES = 8;
-const PATCH_PREVIEW_TAIL_LINES = 8;
+const PATCH_PREVIEW_TAIL_LINES = PATCH_PREVIEW_MAX_LINES - PATCH_PREVIEW_HEAD_LINES - 1;
+const PATCH_PREVIEW_TRUNCATION_MARKER = "…";
 const applyPatchRenderStates = new Map<string, ApplyPatchRenderState>();
 
 function isChangedPreviewLine(line: string): boolean {
@@ -281,6 +282,14 @@ function countLines(text: string): number {
 	return lines;
 }
 
+function enforcePreviewCharLimit(preview: string): string {
+	if (preview.length <= PATCH_PREVIEW_MAX_CHARS) {
+		return preview;
+	}
+
+	return `${preview.slice(0, PATCH_PREVIEW_MAX_CHARS - PATCH_PREVIEW_TRUNCATION_MARKER.length).trimEnd()}${PATCH_PREVIEW_TRUNCATION_MARKER}`;
+}
+
 export function truncatePreview(text: string): string {
 	if (text.length <= PATCH_PREVIEW_MAX_CHARS && countLines(text) <= PATCH_PREVIEW_MAX_LINES) {
 		return text;
@@ -291,11 +300,7 @@ export function truncatePreview(text: string): string {
 	const previewText =
 		changedHunkPreview ??
 		[...lines.slice(0, PATCH_PREVIEW_HEAD_LINES), "…", ...lines.slice(-PATCH_PREVIEW_TAIL_LINES)].join("\n");
-	let preview = previewText;
-	if (preview.length > PATCH_PREVIEW_MAX_CHARS) {
-		preview = `${preview.slice(0, PATCH_PREVIEW_MAX_CHARS).trimEnd()}\n…`;
-	}
-	return preview;
+	return enforcePreviewCharLimit(previewText);
 }
 
 function normalizeApplyPatchArguments(args: unknown): ApplyPatchParams {

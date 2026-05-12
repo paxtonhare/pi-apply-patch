@@ -37,6 +37,7 @@ describe("render helpers", () => {
 		expect(preview).toContain("line-1");
 		expect(preview).toContain(`line-${lines.length}`);
 		expect(preview).toContain("…");
+		expect(preview.split("\n")).toHaveLength(PATCH_PREVIEW_MAX_LINES);
 	});
 
 	it("#given huge payload #when truncating #then enforces max chars", () => {
@@ -47,7 +48,24 @@ describe("render helpers", () => {
 		const preview = truncatePreview(diff);
 
 		// then
-		expect(preview.length).toBeLessThanOrEqual(PATCH_PREVIEW_MAX_CHARS + 2);
+		expect(preview.length).toBeLessThanOrEqual(PATCH_PREVIEW_MAX_CHARS);
+		expect(preview.split("\n").length).toBeLessThanOrEqual(PATCH_PREVIEW_MAX_LINES);
+		expect(preview).toContain("…");
+	});
+
+	it("#given oversized changed hunk #when truncating #then keeps max chars strict", () => {
+		// given
+		const diff = [
+			...Array.from({ length: 20 }, (_, index) => ` ${index + 1} line-${index + 1}`),
+			`-21 ${"x".repeat(PATCH_PREVIEW_MAX_CHARS + 500)}`,
+			"+21 changed",
+		].join("\n");
+
+		// when
+		const preview = truncatePreview(diff);
+
+		// then
+		expect(preview.length).toBeLessThanOrEqual(PATCH_PREVIEW_MAX_CHARS);
 		expect(preview).toContain("…");
 	});
 
