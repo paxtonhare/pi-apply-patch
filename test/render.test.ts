@@ -24,6 +24,18 @@ const markerTheme = {
 	inverse: (text: string) => `<inverse>${text}</inverse>`,
 };
 
+const successBg = "\x1b[48;2;40;50;40m";
+const bgReset = "\x1b[49m";
+const ansiTheme = {
+	fg: (_name: string, text: string) => text,
+	bg: (name: string, text: string) => {
+		const start = name === "toolSuccessBg" ? successBg : "\x1b[48;2;40;40;50m";
+		return `${start}${text}${bgReset}`;
+	},
+	bold: (text: string) => text,
+	inverse: (text: string) => text,
+};
+
 describe("render helpers", () => {
 	it("#given plain text diff #when truncating #then falls back to head and tail", () => {
 		// given
@@ -356,6 +368,41 @@ describe("render helpers", () => {
 		expect(rendered).toContain("└ src/a.ts (+1 -0)");
 		expect(rendered).toContain("└ src/b.ts (+1 -0)");
 		expect(rendered).not.toContain("+1 one");
+	});
+
+	it("#given highlighted diff row #when rendering result in success box #then outer background resumes after row reset", () => {
+		// given
+		const tool = createApplyPatchTool();
+		const result = {
+			content: [{ type: "text" as const, text: "Applied patch" }],
+			details: {
+				preview: {
+					files: [
+						{
+							filePath: "src/foo.ts",
+							operation: "update" as const,
+							diff: "+1 const value = 1;",
+							added: 1,
+							removed: 0,
+						},
+					],
+					added: 1,
+					removed: 0,
+				},
+			},
+		};
+
+		// when
+		const component = tool.renderResult?.(
+			result,
+			{ expanded: true, isPartial: false },
+			ansiTheme as never,
+			{ cwd: "/workspace/project", toolCallId: "result-bg", args: { input: "" } } as never,
+		);
+		const rendered = component?.render(120).join("\n") ?? "";
+
+		// then
+		expect(rendered).toContain(`${bgReset}${successBg}`);
 	});
 
 	it("#given large preview #when rendering result expanded #then shows truncation marker", () => {

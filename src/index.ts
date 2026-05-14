@@ -187,6 +187,25 @@ const PATCH_PREVIEW_TAIL_LINES = PATCH_PREVIEW_MAX_LINES - PATCH_PREVIEW_HEAD_LI
 const PATCH_PREVIEW_TRUNCATION_MARKER = "…";
 const applyPatchRenderStates = new Map<string, ApplyPatchRenderState>();
 
+function applyLayeredBackground(theme: ApplyPatchTheme, bgName: ApplyPatchThemeBg, text: string): string {
+	const marker = "\x1fpi-bg-marker\x1f";
+	const wrappedMarker = theme.bg(bgName, marker);
+	const markerIndex = wrappedMarker.indexOf(marker);
+	if (markerIndex === -1) {
+		return theme.bg(bgName, text);
+	}
+
+	const bgStart = wrappedMarker.slice(0, markerIndex);
+	const bgEnd = wrappedMarker.slice(markerIndex + marker.length);
+	const restored = text.replace(/\x1b\[([0-9;]*)m/g, (sequence: string, params: string) => {
+		if (params === "" || params.split(";").some((param) => param === "0" || param === "49")) {
+			return `${sequence}${bgStart}`;
+		}
+		return sequence;
+	});
+	return `${bgStart}${restored}${bgEnd}`;
+}
+
 function isChangedPreviewLine(line: string): boolean {
 	return /^[+-]\s*\d+\s/.test(line);
 }
@@ -1472,7 +1491,7 @@ export function createApplyPatchTool(): ApplyPatchToolDefinition {
 				const title = progress
 					? `Applying patch (${progress.applied + progress.failed}/${progress.total})`
 					: "Applying patch";
-				const box = new Box(1, 1, (text: string) => theme.bg(bgName, text));
+				const box = new Box(1, 1, (text: string) => applyLayeredBackground(theme, bgName, text));
 				box.addChild(new Text(theme.fg("toolTitle", theme.bold(title)), 0, 0));
 				box.addChild(new Spacer(1));
 				const expanded = options.isPartial ? true : (options.expanded ?? true);
