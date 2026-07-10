@@ -4,7 +4,10 @@ Codex-style `apply_patch` tool extension for the [pi coding agent](https://githu
 
 ## Behavior
 
-The extension registers one LLM-callable tool: `apply_patch`. The tool accepts Codex patch envelopes and applies file additions, updates, deletions, and moves after resolving file paths against the current workspace.
+The extension registers one LLM-callable tool: `apply_patch`. The tool accepts Codex patch envelopes and applies file additions, updates, deletions, and moves. Relative paths resolve from the current working directory; absolute paths and parent traversal use normal Node path semantics without a workspace sandbox.
+
+> [!WARNING]
+> `apply_patch` can modify any path writable by the Pi process, including `/tmp`, sibling repositories, and paths reached through symlinks. Review tool calls carefully when running Pi without an OS-level sandbox.
 
 | Case | Result |
 |------|--------|
