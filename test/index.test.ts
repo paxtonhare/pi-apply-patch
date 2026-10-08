@@ -10,7 +10,6 @@ import {
 	applyPatchDetailed,
 	createApplyPatchTool,
 	extractPatchedPaths,
-	type FreeformToolFormat,
 	isOpenAIGptModel,
 	PatchParseError,
 	registerApplyPatchExtension,
@@ -52,9 +51,15 @@ function createToolsetTestApi(initialActiveTools: string[]): {
 			const eventName = args[0];
 			const handler = args[1];
 			if (typeof eventName !== "string" || !isToolsetHandler(handler)) {
-				return;
+				return () => {};
 			}
 			handlers.set(eventName, [...(handlers.get(eventName) ?? []), handler]);
+			return () => {
+				handlers.set(
+					eventName,
+					(handlers.get(eventName) ?? []).filter((entry) => entry !== handler),
+				);
+			};
 		},
 		getActiveTools() {
 			return [...activeTools];
@@ -105,14 +110,16 @@ describe("pi-apply-patch", () => {
 		// given
 		let capturedToolName: string | undefined;
 		let capturedDescription: string | undefined;
-		let capturedFreeform: FreeformToolFormat | undefined;
+		let capturedSampling: ApplyPatchTool["constrainedSampling"];
 		const extensionApi = {
 			registerTool(tool: ReturnType<typeof createApplyPatchTool>) {
 				capturedToolName = tool.name;
 				capturedDescription = tool.description;
-				capturedFreeform = tool.freeform;
+				capturedSampling = tool.constrainedSampling;
 			},
-			on() {},
+			on() {
+				return () => {};
+			},
 			getActiveTools() {
 				return ["read", "write", "edit"];
 			},
@@ -125,11 +132,45 @@ describe("pi-apply-patch", () => {
 		// then
 		expect(capturedToolName).toBe("apply_patch");
 		expect(capturedDescription).toBe(APPLY_PATCH_FREEFORM_DESCRIPTION);
-		expect(capturedFreeform).toEqual({
+		expect(capturedSampling).toEqual({
 			type: "grammar",
-			syntax: "lark",
-			definition: APPLY_PATCH_LARK_GRAMMAR,
+			variants: { openai_lark: APPLY_PATCH_LARK_GRAMMAR },
 		});
+	});
+
+	it.each([
+		"session_start",
+		"model_select",
+		"before_agent_start",
+	])("#given Azure GPT #when %s #then selects apply_patch and restores edit tools for non-GPT", async (eventName) => {
+		const harness = createToolsetTestApi(["read", "edit", "write"]);
+		registerApplyPatchExtension(harness.api);
+		await harness.trigger(eventName, { provider: "azure", id: "gpt-6-astra" });
+		expect(harness.getActiveTools()).toEqual(["read", "apply_patch"]);
+		await harness.trigger("model_select", { provider: "azure", id: "o1" });
+		expect(harness.getActiveTools()).toEqual(["read", "edit", "write"]);
+	});
+
+	it("#given Pi 1.1 wrapper #when wrapping apply_patch #then preserves grammar and JSON fallback", async () => {
+		// Test the real host boundary without adding an internal runtime dependency to the extension.
+		const wrapperUrl = new URL(
+			"./core/tools/tool-definition-wrapper.js",
+			import.meta.resolve("@earendil-works/pi-coding-agent"),
+		);
+		const { wrapToolDefinition } = await import(wrapperUrl.href);
+		const definition = createApplyPatchTool();
+		const wrapped = wrapToolDefinition(definition);
+		expect(wrapped.constrainedSampling).toEqual({
+			type: "grammar",
+			variants: { openai_lark: APPLY_PATCH_LARK_GRAMMAR },
+		});
+		expect(definition).not.toHaveProperty("freeform");
+		expect(wrapped.parameters).toBe(definition.parameters);
+		expect(wrapped.parameters.required).toEqual(["input"]);
+		expect(wrapped.prepareArguments).toBe(definition.prepareArguments);
+		const input = "*** Begin Patch\n*** Add File: wrapped.txt\n+ok\n*** End Patch";
+		expect(wrapped.prepareArguments(input)).toEqual({ input });
+		expect(wrapped.prepareArguments({ input })).toEqual({ input });
 	});
 
 	it("#given GPT model after reload with apply_patch already active #when session starts #then keeps apply_patch active", async () => {
@@ -940,6 +981,9 @@ EOF`;
 	it("#given model metadata #when checking GPT activation #then only OpenAI GPT models match", () => {
 		expect(isOpenAIGptModel({ provider: "openai", id: "gpt-5" })).toBe(true);
 		expect(isOpenAIGptModel({ provider: "openai-codex", id: "gpt-5.5" })).toBe(true);
+		const azureModel = { provider: "azure", api: "azure-openai-responses", id: "gpt-6-astra" };
+		expect(isOpenAIGptModel(azureModel)).toBe(true);
+		expect(isOpenAIGptModel({ provider: "azure-openai-responses", id: "gpt-5" })).toBe(true);
 		expect(isOpenAIGptModel({ provider: "openai", id: "o1" })).toBe(false);
 		expect(isOpenAIGptModel({ provider: "anthropic", id: "gpt-5" })).toBe(false);
 	});

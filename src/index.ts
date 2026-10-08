@@ -32,15 +32,7 @@ type PatchChunk = {
 	isEndOfFile: boolean;
 };
 
-export type FreeformToolFormat = {
-	type: "grammar";
-	syntax: "lark";
-	definition: string;
-};
-
-type ApplyPatchToolDefinition = ToolDefinition<typeof APPLY_PATCH_PARAMS, ApplyPatchToolDetails | undefined> & {
-	freeform: FreeformToolFormat;
-};
+type ApplyPatchToolDefinition = ToolDefinition<typeof APPLY_PATCH_PARAMS, ApplyPatchToolDetails | undefined>;
 
 export type ApplyPatchExtensionAPI = Pick<ExtensionAPI, "on" | "getActiveTools" | "setActiveTools"> & {
 	registerTool: (tool: ApplyPatchToolDefinition) => void;
@@ -175,7 +167,13 @@ function hasErrorCode(error: unknown, code: string): boolean {
 	return Boolean(error && typeof error === "object" && "code" in error && error.code === code);
 }
 
-const GPT_APPLY_PATCH_PROVIDERS = new Set(["openai", "openai-codex", "azure-openai-responses", "github-copilot"]);
+const GPT_APPLY_PATCH_PROVIDERS = new Set([
+	"openai",
+	"openai-codex",
+	"azure",
+	"azure-openai-responses",
+	"github-copilot",
+]);
 export const PATCH_PREVIEW_MAX_LINES = 16;
 export const PATCH_PREVIEW_MAX_CHARS = 4000;
 const PATCH_PREVIEW_HEAD_LINES = 8;
@@ -1327,11 +1325,15 @@ function syncToolset(
 }
 
 export function createApplyPatchTool(): ApplyPatchToolDefinition {
-	const tool = defineTool({
+	return defineTool({
 		name: "apply_patch",
 		label: "ApplyPatch",
 		description: APPLY_PATCH_FREEFORM_DESCRIPTION,
 		parameters: APPLY_PATCH_PARAMS,
+		constrainedSampling: {
+			type: "grammar",
+			variants: { openai_lark: APPLY_PATCH_LARK_GRAMMAR },
+		},
 		prepareArguments: normalizeApplyPatchArguments,
 		promptSnippet: "Apply Codex-format file patches with apply_patch",
 		promptGuidelines: [
@@ -1458,14 +1460,6 @@ export function createApplyPatchTool(): ApplyPatchToolDefinition {
 			}
 			return component;
 		},
-	});
-
-	return Object.assign(tool, {
-		freeform: {
-			type: "grammar",
-			syntax: "lark",
-			definition: APPLY_PATCH_LARK_GRAMMAR,
-		} satisfies FreeformToolFormat,
 	});
 }
 
