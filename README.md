@@ -35,7 +35,7 @@ Use this tool to edit files with the Codex patch format.
 *** End Patch
 ```
 
-The OpenAI Responses API receives this as a custom freeform grammar tool, not as a JSON function tool.
+On Pi 1.1, the tool declares its unchanged Lark grammar through `constrainedSampling.variants.openai_lark`. Supporting Responses APIs receive a custom freeform grammar tool; other callers retain the JSON `{ "input": "..." }` schema and argument normalization. Azure GPT models use the `azure` provider (distinct from the `azure-openai-responses` API identifier).
 
 ## Installation
 
